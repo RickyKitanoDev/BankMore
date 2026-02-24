@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="docker-compose.yml" />
+    <File Path="Readme.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="D:/projects/BankMore/Account.API/Account.API.csproj" Id="cc4ad30f-0efc-4b60-8b5c-3fb83f161abc" />
+    <Project Path="Tarifa.API/Tarifa.API.csproj" />
+    <Project Path="Transfer.API/Transfer.API.csproj" Id="2526d7d9-d0e8-48de-9409-649991ddde63" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="Account.Tests/Account.Tests.csproj" Id="12f1b039-d952-4eeb-b3e0-4a7f798fe2de" />
+    <Project Path="Tarifa.Tests/Tarifa.Tests.csproj" />
+    <Project Path="Transfer.Tests/Transfer.Tests.csproj" Id="36e48377-0f40-4688-8a31-1dc0977167a1" />
+  </Folder>
+</Solution>
