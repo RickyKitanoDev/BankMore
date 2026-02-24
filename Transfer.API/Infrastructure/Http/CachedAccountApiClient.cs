@@ -20,26 +20,26 @@ public class CachedAccountApiClient : IAccountApiClient
         _logger = logger;
     }
 
-    public async Task<decimal> ObterSaldo(string contaId, string token)
+    public async Task<decimal> ObterSaldo(int numeroConta, string token)
     {
-        var cacheKey = $"saldo:conta:{contaId}";
+        var cacheKey = $"saldo:conta:{numeroConta}";
 
         try
         {
             var cachedValue = await _cache.GetStringAsync(cacheKey);
             if (cachedValue != null)
             {
-                _logger.LogInformation("Cache HIT - Saldo da conta {ContaId}", contaId);
+                _logger.LogInformation("Cache HIT - Saldo da conta {NumeroConta}", numeroConta);
                 return decimal.Parse(cachedValue);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Erro ao buscar saldo do cache para conta {ContaId}", contaId);
+            _logger.LogWarning(ex, "Erro ao buscar saldo do cache para conta {NumeroConta}", numeroConta);
         }
 
-        _logger.LogInformation("Cache MISS - Buscando saldo da conta {ContaId} via HTTP", contaId);
-        var saldo = await _innerClient.ObterSaldo(contaId, token);
+        _logger.LogInformation("Cache MISS - Buscando saldo da conta {NumeroConta} via HTTP", numeroConta);
+        var saldo = await _innerClient.ObterSaldo(numeroConta, token);
 
         try
         {
@@ -53,32 +53,32 @@ public class CachedAccountApiClient : IAccountApiClient
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Erro ao cachear saldo para conta {ContaId}", contaId);
+            _logger.LogWarning(ex, "Erro ao cachear saldo para conta {NumeroConta}", numeroConta);
         }
 
         return saldo;
     }
 
-    public async Task<bool> ValidarConta(string contaId, string token)
+    public async Task<bool> ValidarConta(int numeroConta, string token)
     {
-        var cacheKey = $"conta:valida:{contaId}";
+        var cacheKey = $"conta:valida:{numeroConta}";
 
         try
         {
             var cachedValue = await _cache.GetStringAsync(cacheKey);
             if (cachedValue != null)
             {
-                _logger.LogInformation("Cache HIT - Validação da conta {ContaId}", contaId);
+                _logger.LogInformation("Cache HIT - Validação da conta {NumeroConta}", numeroConta);
                 return bool.Parse(cachedValue);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Erro ao buscar validação do cache para conta {ContaId}", contaId);
+            _logger.LogWarning(ex, "Erro ao buscar validação do cache para conta {NumeroConta}", numeroConta);
         }
 
-        _logger.LogInformation("Cache MISS - Validando conta {ContaId} via HTTP", contaId);
-        var isValid = await _innerClient.ValidarConta(contaId, token);
+        _logger.LogInformation("Cache MISS - Validando conta {NumeroConta} via HTTP", numeroConta);
+        var isValid = await _innerClient.ValidarConta(numeroConta, token);
 
         try
         {
@@ -92,7 +92,7 @@ public class CachedAccountApiClient : IAccountApiClient
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Erro ao cachear validação para conta {ContaId}", contaId);
+            _logger.LogWarning(ex, "Erro ao cachear validação para conta {NumeroConta}", numeroConta);
         }
 
         return isValid;
@@ -109,25 +109,17 @@ public class CachedAccountApiClient : IAccountApiClient
             token, identificacaoRequisicao, numeroConta, valor, tipo);
 
         // Invalida cache de saldo ao realizar movimentação
-        if (result)
+        if (result && numeroConta.HasValue)
         {
             try
             {
-                // Extrai ContaId do token JWT para invalidar cache correto
-                var handler = new JwtSecurityTokenHandler();
-                var jwtToken = handler.ReadJwtToken(token);
-                var contaIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == "ContaId")?.Value;
-
-                if (!string.IsNullOrEmpty(contaIdClaim))
-                {
-                    var cacheKey = $"saldo:conta:{contaIdClaim}";
-                    await _cache.RemoveAsync(cacheKey);
-                    _logger.LogInformation("Cache INVALIDATED - Saldo da conta {ContaId} após movimentação", contaIdClaim);
-                }
+                var cacheKey = $"saldo:conta:{numeroConta.Value}";
+                await _cache.RemoveAsync(cacheKey);
+                _logger.LogInformation("Cache INVALIDATED - Saldo da conta {NumeroConta} após movimentação", numeroConta.Value);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Erro ao invalidar cache de saldo");
+                _logger.LogWarning(ex, "Erro ao invalidar cache de saldo para conta {NumeroConta}", numeroConta.Value);
             }
         }
 

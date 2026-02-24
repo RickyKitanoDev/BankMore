@@ -15,7 +15,11 @@ public class KafkaProducer : IKafkaProducer
             BootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092",
             Acks = Acks.All,
             EnableIdempotence = true,
-            MessageSendMaxRetries = 3
+            MessageSendMaxRetries = 3,
+            RequestTimeoutMs = 5000,           // 5 segundos de timeout para envio
+            MessageTimeoutMs = 5000,           // 5 segundos de timeout total
+            SocketTimeoutMs = 5000,            // 5 segundos de timeout de socket
+            MetadataMaxAgeMs = 5000            // Atualizar metadata a cada 5s
         };
 
         _producer = new ProducerBuilder<string, string>(config).Build();

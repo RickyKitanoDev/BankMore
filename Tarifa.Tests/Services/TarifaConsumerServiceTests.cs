@@ -61,7 +61,7 @@ public class TarifaConsumerServiceTests
         {
             IdentificacaoRequisicao = "transfer-456",
             ContaOrigemId = Guid.NewGuid(),
-            ContaDestinoNumero = 54321,
+            ContaDestinoId = Guid.NewGuid(),
             Valor = 250.00m,
             DataTransferencia = DateTime.UtcNow
         };

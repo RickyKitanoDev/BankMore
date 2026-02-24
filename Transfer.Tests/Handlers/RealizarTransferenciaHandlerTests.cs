@@ -53,20 +53,24 @@ public class RealizarTransferenciaHandlerTests
     {
         // Arrange
         var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        var contaDestinoNumero = 54321;
+        
         var command = new RealizarTransferenciaCommand(
             "transfer-123",
-            54321,
+            contaDestinoNumero,
             100.00m
         )
         {
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = 12345
+            ContaOrigemNumero = contaOrigemNumero
         };
 
         _repositoryMock
             .Setup(x => x.ExistePorIdentificacao(command.IdentificacaoRequisicao))
             .ReturnsAsync(false);
 
+        // Débito: null = usa conta do token
         _accountApiMock
             .Setup(x => x.RealizarMovimentacaoAsync(
                 It.IsAny<string>(),
@@ -76,11 +80,12 @@ public class RealizarTransferenciaHandlerTests
                 'D'))
             .ReturnsAsync(true);
 
+        // Crédito: passa número da conta destino
         _accountApiMock
             .Setup(x => x.RealizarMovimentacaoAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                command.ContaDestinoNumero,
+                contaDestinoNumero,
                 command.Valor,
                 'C'))
             .ReturnsAsync(true);
@@ -98,7 +103,7 @@ public class RealizarTransferenciaHandlerTests
 
         // Assert
         _accountApiMock.Verify(x => x.RealizarMovimentacaoAsync(It.IsAny<string>(), It.IsAny<string>(), null, command.Valor, 'D'), Times.Once);
-        _accountApiMock.Verify(x => x.RealizarMovimentacaoAsync(It.IsAny<string>(), It.IsAny<string>(), command.ContaDestinoNumero, command.Valor, 'C'), Times.Once);
+        _accountApiMock.Verify(x => x.RealizarMovimentacaoAsync(It.IsAny<string>(), It.IsAny<string>(), contaDestinoNumero, command.Valor, 'C'), Times.Once);
         _kafkaProducerMock.Verify(x => x.PublishAsync(It.IsAny<string>(), It.IsAny<object>()), Times.Once);
     }
 
@@ -107,6 +112,8 @@ public class RealizarTransferenciaHandlerTests
     {
         // Arrange
         var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        
         var command = new RealizarTransferenciaCommand(
             "duplicated-456",
             54321,
@@ -114,7 +121,7 @@ public class RealizarTransferenciaHandlerTests
         )
         {
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = 12345
+            ContaOrigemNumero = contaOrigemNumero
         };
 
         _repositoryMock
@@ -136,6 +143,8 @@ public class RealizarTransferenciaHandlerTests
     {
         // Arrange
         var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        
         var command = new RealizarTransferenciaCommand(
             "invalid-789",
             54321,
@@ -143,7 +152,7 @@ public class RealizarTransferenciaHandlerTests
         )
         {
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = 12345
+            ContaOrigemNumero = contaOrigemNumero
         };
 
         // Act
@@ -158,6 +167,8 @@ public class RealizarTransferenciaHandlerTests
     {
         // Arrange
         var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        
         var command = new RealizarTransferenciaCommand(
             "no-token-111",
             54321,
@@ -165,7 +176,7 @@ public class RealizarTransferenciaHandlerTests
         )
         {
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = 12345
+            ContaOrigemNumero = contaOrigemNumero
         };
 
         var httpContext = new DefaultHttpContext();
@@ -187,6 +198,8 @@ public class RealizarTransferenciaHandlerTests
     {
         // Arrange
         var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        
         var command = new RealizarTransferenciaCommand(
             "kafka-555",
             54321,
@@ -194,7 +207,7 @@ public class RealizarTransferenciaHandlerTests
         )
         {
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = 12345
+            ContaOrigemNumero = contaOrigemNumero
         };
 
         _repositoryMock
@@ -218,5 +231,126 @@ public class RealizarTransferenciaHandlerTests
 
         // Assert
         _kafkaProducerMock.Verify(x => x.PublishAsync("transferencias-realizadas", It.IsAny<object>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_DeveLancarExcecao_QuandoContaDestinoInvalida()
+    {
+        // Arrange
+        var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        
+        var command = new RealizarTransferenciaCommand(
+            "invalid-dest-999",
+            0, // Número inválido
+            100.00m
+        )
+        {
+            ContaOrigemId = contaOrigemId,
+            ContaOrigemNumero = contaOrigemNumero
+        };
+
+        // Act
+        Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<BusinessException>()
+            .WithMessage("*conta de destino inválido*");
+    }
+
+    [Fact]
+    public async Task Handle_DeveLancarExcecao_QuandoTransferenciaParaMesmaConta()
+    {
+        // Arrange
+        var contaOrigemId = Guid.NewGuid();
+        var mesmoNumero = 12345;
+        
+        var command = new RealizarTransferenciaCommand(
+            "self-transfer-888",
+            mesmoNumero, // Mesmo número da origem
+            100.00m
+        )
+        {
+            ContaOrigemId = contaOrigemId,
+            ContaOrigemNumero = mesmoNumero
+        };
+
+        // Act
+        Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<BusinessException>()
+            .WithMessage("*mesma conta*");
+    }
+
+    [Fact]
+    public async Task Handle_DeveRealizarEstorno_QuandoCreditoFalhar()
+    {
+        // Arrange
+        var contaOrigemId = Guid.NewGuid();
+        var contaOrigemNumero = 12345;
+        var contaDestinoNumero = 54321;
+        
+        var command = new RealizarTransferenciaCommand(
+            "rollback-777",
+            contaDestinoNumero,
+            100.00m
+        )
+        {
+            ContaOrigemId = contaOrigemId,
+            ContaOrigemNumero = contaOrigemNumero
+        };
+
+        _repositoryMock
+            .Setup(x => x.ExistePorIdentificacao(command.IdentificacaoRequisicao))
+            .ReturnsAsync(false);
+
+        // Débito bem-sucedido
+        _accountApiMock
+            .Setup(x => x.RealizarMovimentacaoAsync(
+                It.IsAny<string>(),
+                It.Is<string>(id => id.Contains("DEBIT")),
+                null,
+                command.Valor,
+                'D'))
+            .ReturnsAsync(true);
+
+        // Crédito falha
+        _accountApiMock
+            .Setup(x => x.RealizarMovimentacaoAsync(
+                It.IsAny<string>(),
+                It.Is<string>(id => id.Contains("CREDIT") && !id.Contains("REVERSAL")),
+                contaDestinoNumero,
+                command.Valor,
+                'C'))
+            .ReturnsAsync(false);
+
+        // Estorno bem-sucedido
+        _accountApiMock
+            .Setup(x => x.RealizarMovimentacaoAsync(
+                It.IsAny<string>(),
+                It.Is<string>(id => id.Contains("REVERSAL")),
+                null,
+                command.Valor,
+                'C'))
+            .ReturnsAsync(true);
+
+        // Act
+        Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<BusinessException>()
+            .WithMessage("*crédito na conta de destino*");
+        
+        // Verifica que tentou fazer estorno
+        _accountApiMock.Verify(x => x.RealizarMovimentacaoAsync(
+            It.IsAny<string>(),
+            It.Is<string>(id => id.Contains("REVERSAL")),
+            null,
+            command.Valor,
+            'C'), Times.Once);
+        
+        // Não deve persistir transferência falhada
+        _repositoryMock.Verify(x => x.AdicionarAsync(It.IsAny<Transferencia>()), Times.Never);
     }
 }

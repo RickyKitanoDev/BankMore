@@ -1,7 +1,10 @@
-CREATE TABLE IF NOT EXISTS Transferencia (
+-- Drop old table if exists and recreate with new schema
+DROP TABLE IF EXISTS Transferencia;
+
+CREATE TABLE Transferencia (
     Id TEXT PRIMARY KEY,
     ContaOrigemId TEXT NOT NULL,
-    ContaDestinoNumero INTEGER NOT NULL,
+    ContaDestinoId TEXT NOT NULL,
     Valor REAL NOT NULL,
     DataTransferencia TEXT NOT NULL,
     IdentificacaoRequisicao TEXT NOT NULL UNIQUE,

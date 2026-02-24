@@ -19,6 +19,10 @@ public class TarifaWebApplicationFactory : WebApplicationFactory<Program>
         {
             config.AddInMemoryCollection(new Dictionary<string, string>
             {
+                ["Jwt:Key"] = "test-key-for-integration-tests-purposes-only-min-32-chars",
+                ["Jwt:Issuer"] = "TarifaAPI-Test",
+                ["Jwt:Audience"] = "TarifaAPI-Test",
+                ["Jwt:ExpireMinutes"] = "120",
                 ["Kafka:BootstrapServers"] = "localhost:9092",
                 ["Kafka:GroupId"] = "tarifa-service-test",
                 ["Kafka:Topics:TransferenciasRealizadas"] = "transferencias-realizadas-test",

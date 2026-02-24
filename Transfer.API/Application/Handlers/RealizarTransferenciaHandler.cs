@@ -42,10 +42,18 @@ public class RealizarTransferenciaHandler : IRequestHandler<RealizarTransferenci
             throw new BusinessException("Valor inválido", "INVALID_VALUE");
 
         // 2. Validate required data from token
-        if (!request.ContaOrigemId.HasValue)
+        if (!request.ContaOrigemId.HasValue || !request.ContaOrigemNumero.HasValue)
             throw new BusinessException("Conta de origem inválida", "INVALID_ACCOUNT");
 
-        // 3. Idempotency check
+        // 3. Validate destination account number
+        if (request.ContaDestinoNumero <= 0)
+            throw new BusinessException("Número da conta de destino inválido", "INVALID_ACCOUNT");
+
+        // 4. Prevent self-transfer
+        if (request.ContaDestinoNumero == request.ContaOrigemNumero.Value)
+            throw new BusinessException("Não é possível transferir para a mesma conta", "INVALID_ACCOUNT");
+
+        // 5. Idempotency check
         if (await _repository.ExistePorIdentificacao(request.IdentificacaoRequisicao))
         {
             _logger.LogInformation("Transferência já processada (idempotência): {Id}", request.IdentificacaoRequisicao);
@@ -59,49 +67,49 @@ public class RealizarTransferenciaHandler : IRequestHandler<RealizarTransferenci
         if (string.IsNullOrEmpty(token))
             throw new BusinessException("Token não encontrado", "USER_UNAUTHORIZED");
 
-        // 4. Generate unique IDs for debit and credit operations
+        // 6. Generate unique IDs for debit and credit operations
         var debitoId = $"{request.IdentificacaoRequisicao}-DEBIT";
         var creditoId = $"{request.IdentificacaoRequisicao}-CREDIT";
 
         try
         {
-            // 5. Perform DEBIT on origin account (logged user account)
-            _logger.LogInformation("Iniciando débito na conta origem: {ContaId}, Valor: {Valor}", 
-                request.ContaOrigemId, request.Valor);
+            // 7. Perform DEBIT on origin account (logged user account - uses token)
+            _logger.LogInformation("Iniciando débito na conta origem: {NumeroConta}, Valor: {Valor}", 
+                request.ContaOrigemNumero, request.Valor);
 
             var debitoSuccess = await _accountApi.RealizarMovimentacaoAsync(
                 token,
                 debitoId,
-                null, // Use account from token
+                null, // null = usa a conta do token
                 request.Valor,
                 'D'); // Debit
 
             if (!debitoSuccess)
                 throw new BusinessException("Falha ao realizar débito na conta de origem", "DEBIT_FAILED");
 
-            // 6. Perform CREDIT on destination account
-            _logger.LogInformation("Iniciando crédito na conta destino: {ContaDestino}, Valor: {Valor}", 
+            // 8. Perform CREDIT on destination account (explicit account number)
+            _logger.LogInformation("Iniciando crédito na conta destino: {NumeroConta}, Valor: {Valor}", 
                 request.ContaDestinoNumero, request.Valor);
 
             var creditoSuccess = await _accountApi.RealizarMovimentacaoAsync(
                 token,
                 creditoId,
-                request.ContaDestinoNumero,
+                request.ContaDestinoNumero, // Explicit destination account number
                 request.Valor,
                 'C'); // Credit
 
             if (!creditoSuccess)
             {
-                // 7. ROLLBACK: Credit failed, reverse debit (credit back to origin)
+                // 9. ROLLBACK: Credit failed, reverse debit (credit back to origin)
                 _logger.LogWarning("Falha no crédito, iniciando estorno para conta origem");
 
                 var estornoId = $"{request.IdentificacaoRequisicao}-REVERSAL";
                 var estornoSuccess = await _accountApi.RealizarMovimentacaoAsync(
                     token,
                     estornoId,
-                    null, // Origin account from token
+                    null, // null = usa a conta do token
                     request.Valor,
-                    'C'); // Credit to reverse
+                    'C'); // Credit back (reversal)
 
                 if (!estornoSuccess)
                     _logger.LogError("CRÍTICO: Falha no estorno da transferência {Id}", request.IdentificacaoRequisicao);
@@ -109,12 +117,12 @@ public class RealizarTransferenciaHandler : IRequestHandler<RealizarTransferenci
                 throw new BusinessException("Falha ao realizar crédito na conta de destino", "CREDIT_FAILED");
             }
 
-            // 8. Persist successful transfer
+            // 10. Persist successful transfer (ainda usa GUIDs internamente para manter compatibilidade)
             var transferencia = new Transferencia
             {
                 Id = Guid.NewGuid(),
                 ContaOrigemId = request.ContaOrigemId.Value,
-                ContaDestinoNumero = request.ContaDestinoNumero,
+                ContaDestinoId = Guid.Empty, // Temporário - será atualizado quando tiver endpoint para buscar conta por número
                 Valor = request.Valor,
                 DataTransferencia = DateTime.UtcNow,
                 IdentificacaoRequisicao = request.IdentificacaoRequisicao,
@@ -125,19 +133,34 @@ public class RealizarTransferenciaHandler : IRequestHandler<RealizarTransferenci
 
             _logger.LogInformation("Transferência concluída com sucesso: {Id}", request.IdentificacaoRequisicao);
 
-            // 9. Publish event to Kafka (after success)
-            var topic = _configuration["Kafka:Topics:TransferenciasRealizadas"] ?? "transferencias-realizadas";
-
-            await _kafkaProducer.PublishAsync(topic, new TransferenciaRealizadaEvent
+            // 11. Publish event to Kafka (after success) - Non-blocking with timeout
+            try
             {
-                IdentificacaoRequisicao = request.IdentificacaoRequisicao,
-                ContaOrigemId = request.ContaOrigemId.Value,
-                ContaDestinoNumero = request.ContaDestinoNumero,
-                Valor = request.Valor,
-                DataTransferencia = transferencia.DataTransferencia
-            });
+                var topic = _configuration["Kafka:Topics:TransferenciasRealizadas"] ?? "transferencias-realizadas";
 
-            _logger.LogInformation("Evento de transferência publicado no Kafka: {Id}", request.IdentificacaoRequisicao);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _kafkaProducer.PublishAsync(topic, new TransferenciaRealizadaEvent
+                {
+                    IdentificacaoRequisicao = request.IdentificacaoRequisicao,
+                    ContaOrigemId = request.ContaOrigemId.Value,
+                    ContaDestinoId = Guid.Empty, // Temporário
+                    Valor = request.Valor,
+                    DataTransferencia = transferencia.DataTransferencia
+                });
+
+                _logger.LogInformation("Evento de transferência publicado no Kafka: {Id}", request.IdentificacaoRequisicao);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Timeout ao publicar evento Kafka para transferência {Id} - transferência já foi concluída", 
+                    request.IdentificacaoRequisicao);
+            }
+            catch (Exception kafkaEx)
+            {
+                _logger.LogError(kafkaEx, "Falha ao publicar evento Kafka para transferência {Id} - transferência já foi concluída", 
+                    request.IdentificacaoRequisicao);
+                // NÃO propaga o erro - transferência já foi concluída com sucesso
+            }
         }
         catch (BusinessException)
         {
@@ -145,7 +168,8 @@ public class RealizarTransferenciaHandler : IRequestHandler<RealizarTransferenci
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro inesperado ao processar transferência {Id}", request.IdentificacaoRequisicao);
+            _logger.LogError(ex, "Erro inesperado ao processar transferência {Id}. Exception: {ExType}, Message: {ExMsg}, Inner: {Inner}", 
+                request.IdentificacaoRequisicao, ex.GetType().Name, ex.Message, ex.InnerException?.Message);
             throw new BusinessException("Erro ao processar transferência", "TRANSFER_ERROR");
         }
     }

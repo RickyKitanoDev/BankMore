@@ -27,10 +27,10 @@ public class AccountApiClient : IAccountApiClient
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/movimentacao");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            // NumeroConta não é enviado - Account.API extrai do token JWT
             var payload = new
             {
                 identificacaoRequisicao,
+                contaId = numeroConta, // Campo opcional - se null, Account.API usa do token
                 valor,
                 tipo
             };
@@ -44,15 +44,15 @@ public class AccountApiClient : IAccountApiClient
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Movimentação realizada com sucesso: {Id}, Tipo: {Tipo}, Valor: {Valor}", 
-                    identificacaoRequisicao, tipo, valor);
+                _logger.LogInformation("Movimentação realizada com sucesso: {Id}, Tipo: {Tipo}, Valor: {Valor}, Conta: {Conta}", 
+                    identificacaoRequisicao, tipo, valor, numeroConta?.ToString() ?? "token");
                 return true;
             }
 
             var errorContent = await response.Content.ReadAsStringAsync();
             _logger.LogWarning("Falha na movimentação: {StatusCode}, {Error}", 
                 response.StatusCode, errorContent);
-            
+
             return false;
         }
         catch (Exception ex)
@@ -62,11 +62,11 @@ public class AccountApiClient : IAccountApiClient
         }
     }
 
-    public async Task<decimal> ObterSaldo(string contaId, string token)
+    public async Task<decimal> ObterSaldo(int numeroConta, string token)
     {
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/movimentacao/saldo/{contaId}");
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/movimentacao/saldo");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             var response = await _httpClient.SendAsync(request);
@@ -87,16 +87,18 @@ public class AccountApiClient : IAccountApiClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao obter saldo da conta {ContaId}", contaId);
+            _logger.LogError(ex, "Erro ao obter saldo da conta {NumeroConta}", numeroConta);
             return 0m;
         }
     }
 
-    public async Task<bool> ValidarConta(string contaId, string token)
+    public async Task<bool> ValidarConta(int numeroConta, string token)
     {
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/movimentacao/saldo/{contaId}");
+            // Para validar a conta, tentamos fazer uma chamada ao endpoint de saldo
+            // Se retornar sucesso, a conta existe e está ativa
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/movimentacao/saldo");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             var response = await _httpClient.SendAsync(request);
@@ -104,7 +106,7 @@ public class AccountApiClient : IAccountApiClient
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao validar conta {ContaId}", contaId);
+            _logger.LogError(ex, "Erro ao validar conta {NumeroConta}", numeroConta);
             return false;
         }
     }

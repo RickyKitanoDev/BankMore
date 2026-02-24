@@ -29,14 +29,14 @@ public class TransferenciaRepository : ITransferenciaRepository
         using var connection = _factory.CreateConnection();
 
         var sql = @"INSERT INTO Transferencia 
-                    (Id, ContaOrigemId, ContaDestinoNumero, Valor, DataTransferencia, IdentificacaoRequisicao, Status)
-                    VALUES (@Id, @ContaOrigemId, @ContaDestinoNumero, @Valor, @DataTransferencia, @IdentificacaoRequisicao, @Status)";
+                    (Id, ContaOrigemId, ContaDestinoId, Valor, DataTransferencia, IdentificacaoRequisicao, Status)
+                    VALUES (@Id, @ContaOrigemId, @ContaDestinoId, @Valor, @DataTransferencia, @IdentificacaoRequisicao, @Status)";
 
         await connection.ExecuteAsync(sql, new
         {
             Id = transferencia.Id.ToString(),
             ContaOrigemId = transferencia.ContaOrigemId.ToString(),
-            transferencia.ContaDestinoNumero,
+            ContaDestinoId = transferencia.ContaDestinoId.ToString(),
             transferencia.Valor,
             DataTransferencia = transferencia.DataTransferencia.ToString("o"),
             transferencia.IdentificacaoRequisicao,

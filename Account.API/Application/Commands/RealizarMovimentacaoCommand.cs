@@ -2,6 +2,7 @@
 
 using MediatR;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 public record RealizarMovimentacaoCommand(
     [Required(ErrorMessage = "Identificação da requisição é obrigatória")]
@@ -11,11 +12,17 @@ public record RealizarMovimentacaoCommand(
     decimal Valor,
 
     [Required(ErrorMessage = "Tipo de movimento é obrigatório")]
-    char Tipo
+    char Tipo,
+
+    // Número da conta (opcional - se não informado, usa a do token)
+    int? ContaId = null
 ) : IRequest
 {
-    // Internal properties set from JWT token or service calls
+    // Set from JWT token
+    [JsonIgnore]
     public Guid? ContaOrigemId { get; init; }
+
+    [JsonIgnore]
     public int? NumeroConta { get; init; }
 }
 

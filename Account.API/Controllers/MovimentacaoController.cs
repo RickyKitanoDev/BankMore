@@ -27,26 +27,45 @@ public class MovimentacaoController : ControllerBase
     /// <summary>
     /// Realiza uma movimentação (crédito ou débito) na conta autenticada.
     /// Requer token JWT no header Authorization.
-    /// A conta é extraída automaticamente do token - usuário não pode movimentar contas de terceiros.
+    /// Para débitos: a conta é extraída do token JWT (não pode debitar de terceiros).
+    /// Para créditos: pode usar contaId do payload (permitir transferências).
     /// </summary>
-    /// <param name="command">RealizarMovimentacaoCommand com IdentificacaoRequisicao, Valor e Tipo</param>
+    /// <param name="command">RealizarMovimentacaoCommand com IdentificacaoRequisicao, Valor, Tipo e opcionalmente ContaId</param>
     /// <returns>204 No Content em caso de sucesso</returns>
     public async Task<IActionResult> Post(RealizarMovimentacaoCommand command)
     {
-        // Extract ContaId and NumeroConta from JWT token
+        // Extract ContaId from JWT token
         var contaIdClaim = User.FindFirst("ContaId")?.Value;
         var numeroContaClaim = User.FindFirst("NumeroConta")?.Value;
 
-        if (string.IsNullOrEmpty(contaIdClaim) || !System.Guid.TryParse(contaIdClaim, out var contaOrigemId))
+        if (string.IsNullOrEmpty(contaIdClaim) || !System.Guid.TryParse(contaIdClaim, out var contaFromToken))
             return StatusCode(403, new { message = "Token inválido ou expirado", type = "USER_UNAUTHORIZED" });
 
-        if (string.IsNullOrEmpty(numeroContaClaim) || !int.TryParse(numeroContaClaim, out var numeroConta))
+        if (string.IsNullOrEmpty(numeroContaClaim) || !int.TryParse(numeroContaClaim, out var numeroContaFromToken))
             return StatusCode(403, new { message = "Token inválido ou expirado", type = "USER_UNAUTHORIZED" });
 
-        // Set ContaOrigemId and NumeroConta from token
+        // Validate type
+        if (command.Tipo != 'C' && command.Tipo != 'D')
+            return BadRequest(new { message = "Tipo inválido. Use 'D' para débito ou 'C' para crédito", type = "INVALID_TYPE" });
+
+        // Para DÉBITOS: sempre usar conta do token (segurança - não pode debitar de terceiros)
+        // Para CRÉDITOS: usar numero de conta do payload se fornecido, senão do token
+        int numeroConta;
+        if (command.Tipo == 'D')
+        {
+            // Débito: SEMPRE da conta do token (segurança)
+            numeroConta = numeroContaFromToken;
+        }
+        else // command.Tipo == 'C'
+        {
+            // Crédito: usar numero da conta do payload se fornecido (parametro ContaId no JSON), senão do token
+            numeroConta = command.ContaId ?? numeroContaFromToken;
+        }
+
+        // Set ContaOrigemId (GUID do token) and NumeroConta
         var commandWithContaId = command with 
         { 
-            ContaOrigemId = contaOrigemId,
+            ContaOrigemId = contaFromToken,
             NumeroConta = numeroConta
         };
 

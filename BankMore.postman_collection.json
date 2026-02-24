@@ -1,0 +1,251 @@
+{
+  "info": {
+    "name": "BankMore - Fluxo Completo",
+    "description": "Collection completa para testar o BankMore",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl_account",
+      "value": "http://localhost:5001"
+    },
+    {
+      "key": "baseUrl_transfer",
+      "value": "http://localhost:5002"
+    },
+    {
+      "key": "token_joao",
+      "value": ""
+    },
+    {
+      "key": "token_maria",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Registrar João (Origem)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroConta\": 12345,\n  \"cpf\": \"12345678909\",\n  \"nome\": \"João Silva\",\n  \"senha\": \"SenhaForte123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_account}}/api/auth/register",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "2. Login João (copiar token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "pm.collectionVariables.set('token_joao', response.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroOuCpf\": \"12345\",\n  \"senha\": \"SenhaForte123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_account}}/api/auth/login",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Adicionar R$ 1000 no João",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_joao}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identificacaoRequisicao\": \"cred-001\",\n  \"valor\": 1000.00,\n  \"tipo\": \"C\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_account}}/api/movimentacao",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "movimentacao"]
+        }
+      }
+    },
+    {
+      "name": "4. Consultar Saldo João (R$ 1000)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_joao}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl_account}}/api/movimentacao/saldo",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "movimentacao", "saldo"]
+        }
+      }
+    },
+    {
+      "name": "5. Registrar Maria (Destino)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroConta\": 56789,\n  \"cpf\": \"98765432100\",\n  \"nome\": \"Maria Santos\",\n  \"senha\": \"OutraSenha123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_account}}/api/auth/register",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "6. Login Maria",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "pm.collectionVariables.set('token_maria', response.token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroOuCpf\": \"56789\",\n  \"senha\": \"OutraSenha123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_account}}/api/auth/login",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "7. Consultar Saldo Maria (R$ 0)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_maria}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl_account}}/api/movimentacao/saldo",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "movimentacao", "saldo"]
+        }
+      }
+    },
+    {
+      "name": "8. Transferir R$ 100 (João → Maria)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_joao}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identificacaoRequisicao\": \"transf-001\",\n  \"contaDestinoNumero\": 56789,\n  \"valor\": 100.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl_transfer}}/api/transferencia",
+          "host": ["{{baseUrl_transfer}}"],
+          "path": ["api", "transferencia"]
+        }
+      }
+    },
+    {
+      "name": "9. Verificar Saldo João (R$ 898)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_joao}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl_account}}/api/movimentacao/saldo",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "movimentacao", "saldo"]
+        }
+      }
+    },
+    {
+      "name": "10. Verificar Saldo Maria (R$ 100)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token_maria}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl_account}}/api/movimentacao/saldo",
+          "host": ["{{baseUrl_account}}"],
+          "path": ["api", "movimentacao", "saldo"]
+        }
+      }
+    }
+  ]
+}

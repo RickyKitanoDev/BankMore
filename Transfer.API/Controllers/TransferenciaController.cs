@@ -37,14 +37,14 @@ public class TransferenciaController : ControllerBase
         if (string.IsNullOrEmpty(contaIdClaim) || !Guid.TryParse(contaIdClaim, out var contaOrigemId))
             return StatusCode(403, new { message = "Token inválido ou expirado", type = "USER_UNAUTHORIZED" });
 
-        if (string.IsNullOrEmpty(numeroContaClaim) || !int.TryParse(numeroContaClaim, out var contaOrigemNumero))
+        if (string.IsNullOrEmpty(numeroContaClaim) || !int.TryParse(numeroContaClaim, out var numeroContaOrigem))
             return StatusCode(403, new { message = "Token inválido ou expirado", type = "USER_UNAUTHORIZED" });
 
-        // Create new command with ContaOrigemId and ContaOrigemNumero from token
+        // Create new command with ContaOrigemId and NumeroConta from token
         var commandWithOrigin = command with 
         { 
             ContaOrigemId = contaOrigemId,
-            ContaOrigemNumero = contaOrigemNumero
+            ContaOrigemNumero = numeroContaOrigem
         };
 
         await _mediator.Send(commandWithOrigin);
